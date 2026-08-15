@@ -112,7 +112,7 @@
     <div class="admin-toggle" id="adminToggle">mode admin</div>
   </header>
 
-  <div class="connbar" id="connbar"><span><span class="dot pending" id="connDot"></span><span id="connText">Menghubungkan ke Google Sheet…</span></span></div>
+  <div class="connbar" id="connbar"><span><span class="dot pending" id="connDot"></span><span id="connText">Memuat data dari Google Sheet…</span></span></div>
 
   <div class="grid">
     <div class="card">
@@ -190,10 +190,6 @@
 </div>
 
 <script>
-// ==== GANTI URL INI setelah deploy Code.gs sebagai Web App ====
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzdI1hv1aPVT189aV0Tc41ykQ7_IZn7P0FZi1Fvv7sFlaa78kQc6UDkBLchgeiy4ksMvg/exec';
-// ================================================================
-
 const ROMAN = ['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII'];
 const STAGES = ['BAUT','BAPP','BAST'];
 let isAdmin = false;
@@ -223,24 +219,19 @@ function setConn(state, text){
   connected = state === 'ok';
 }
 
-async function apiCall(action, payload){
-  if(APPS_SCRIPT_URL.indexOf('PASTE_URL') === 0){
-    throw new Error('APPS_SCRIPT_URL belum diisi. Deploy Code.gs dulu lalu tempel URL-nya di bagian atas script.');
-  }
-  const params = new URLSearchParams();
-  params.set('action', action);
-  Object.keys(payload || {}).forEach(k => params.set(k, payload[k]));
-  params.set('_t', Date.now());
-  const res = await fetch(APPS_SCRIPT_URL + '?' + params.toString(), { method: 'GET' });
-  const data = await res.json();
-  if(data.error) throw new Error(data.error);
-  return data;
+function gsRun(fnName, arg){
+  return new Promise((resolve, reject)=>{
+    google.script.run
+      .withSuccessHandler(resolve)
+      .withFailureHandler(err => reject(new Error(err.message || String(err))))
+      [fnName](arg);
+  });
 }
 
 async function loadState(){
   try{
     setConn('pending','Menghubungkan ke Google Sheet…');
-    const state = await apiCall('getState');
+    const state = await gsRun('getState');
     counters = state.counters || {};
     history = state.history || [];
     setConn('ok','Terhubung ke Google Sheet');
@@ -291,7 +282,7 @@ function renderCounters(){
         const stage = e.target.dataset.stage;
         const v = Math.max(0, parseInt(e.target.value,10) || 0);
         try{
-          await apiCall('setCounter', {stage, year, value: v});
+          await gsRun('setCounter', {stage, year, value: v});
           if(!counters[stage]) counters[stage] = {};
           counters[stage][year] = v;
           renderCounters();
@@ -339,7 +330,7 @@ function renderHistory(){
     btn.addEventListener('click', async ()=>{
       const id = btn.dataset.id;
       try{
-        await apiCall('deleteHistory', {id});
+        await gsRun('deleteHistory', {id});
         history = history.filter(r=>r.id!==id);
         renderHistory();
       }catch(err){ alert('Gagal hapus: ' + err.message); }
@@ -379,7 +370,7 @@ document.getElementById('genBtn').addEventListener('click', async ()=>{
   btn.textContent = 'Menyimpan…';
 
   try{
-    const res = await apiCall('generate', {stage, po, month, year, qty});
+    const res = await gsRun('generateNumbers', {stage, po, month, year, qty});
     const entries = res.entries;
     if(!counters[stage]) counters[stage] = {};
     counters[stage][year] = entries[entries.length-1].seq;
